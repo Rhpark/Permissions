@@ -58,7 +58,13 @@ class MainActivity : AppCompatActivity() {
         Manifest.permission.WRITE_EXTERNAL_STORAGE,
         Manifest.permission.READ_PHONE_STATE,
         Manifest.permission.READ_PHONE_NUMBERS,
-        Manifest.permission.SYSTEM_ALERT_WINDOW
+        Manifest.permission.SYSTEM_ALERT_WINDOW,
+        Manifest.permission.WRITE_SETTINGS,
+        Manifest.permission.PACKAGE_USAGE_STATS,
+        Manifest.permission.MANAGE_EXTERNAL_STORAGE,
+        Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+        Manifest.permission.SCHEDULE_EXACT_ALARM,
+        Manifest.permission.POST_NOTIFICATIONS
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
