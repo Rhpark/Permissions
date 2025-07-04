@@ -17,7 +17,8 @@ class MainActivity : AppCompatActivity() {
     /************************
      *   Permission Check   *
      ************************/
-    private val permission = PermissionManager()
+    private val permission = PermissionManager.getInstance()
+    private var currentRequestId: String? = null
 
 
     /**
@@ -26,7 +27,8 @@ class MainActivity : AppCompatActivity() {
     private val requestPermissionAlertWindowLauncher: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             Logx.d("requestPermissionAlertWindowLauncher ${Settings.canDrawOverlays(this)}")
-            // Result handling is done by PermissionManager
+            // 특수 권한 결과 처리 - 현재는 SYSTEM_ALERT_WINDOW만 처리
+            permission.resultSpecialPermission(this, Manifest.permission.SYSTEM_ALERT_WINDOW, currentRequestId)
         }
 
     /**
@@ -35,7 +37,7 @@ class MainActivity : AppCompatActivity() {
     private val requestPermissionLauncher: ActivityResultLauncher<Array<String>> =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             Logx.d("requestPermissionLauncher ${permissions}")
-            permission.result(this, permissions)
+            permission.result(this, permissions, currentRequestId)
         }
 
     /**
@@ -45,7 +47,7 @@ class MainActivity : AppCompatActivity() {
         permissions: List<String>,
         onResult: ((deniedPermissions: List<String>) -> Unit)
     ) {
-        permission.request(
+        currentRequestId = permission.request(
             this,
             requestPermissionLauncher,
             requestPermissionAlertWindowLauncher,
@@ -86,5 +88,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // 현재 요청이 있다면 취소
+        currentRequestId?.let { requestId ->
+            permission.cancelRequest(requestId)
+        }
     }
 }

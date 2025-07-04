@@ -10,10 +10,33 @@ import android.provider.Settings
 import androidx.activity.result.ActivityResultLauncher
 import kr.open.library.permissions.extensions.remainPermissions
 import kr.open.library.permissions.extensions.isSpecialPermission
+import kr.open.library.permissions.extensions.hasPermission
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.lang.ref.WeakReference
 
-public open class PermissionManager() {
+public class PermissionManager private constructor() {
 
-    private var onResult: ((deniedPermissions: List<String>) -> Unit)? = null
+    companion object {
+        @Volatile
+        private var INSTANCE: PermissionManager? = null
+        
+        fun getInstance(): PermissionManager {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: PermissionManager().also { INSTANCE = it }
+            }
+        }
+    }
+
+    private val pendingRequests = ConcurrentHashMap<String, PermissionRequest>()
+    private val contextRef = ConcurrentHashMap<String, WeakReference<Context>>()
+    
+    private data class PermissionRequest(
+        val requestId: String,
+        val permissions: List<String>,
+        val onResult: (deniedPermissions: List<String>) -> Unit,
+        val timestamp: Long = System.currentTimeMillis()
+    )
 
     public fun getIntentForSystemAlertWindow(context: Context): Intent =
         Intent(
@@ -85,7 +108,7 @@ public open class PermissionManager() {
     ): Boolean =
         isRemainPermissionSystemAlertWindow(permissions) && !Settings.canDrawOverlays(context)
 
-    public fun result(context: Context, permissions: Map<String, Boolean>) {
+    public fun result(context: Context, permissions: Map<String, Boolean>, requestId: String? = null) {
         val deniedPermissions = mutableListOf<String>()
         permissions.forEach { (permission, granted) ->
             if (!granted) {
@@ -98,8 +121,43 @@ public open class PermissionManager() {
                 }
             }
         }
-        onResult?.invoke(deniedPermissions)
-        onResult = null
+        
+        if (requestId != null) {
+            val request = pendingRequests.remove(requestId)
+            contextRef.remove(requestId)
+            request?.onResult?.invoke(deniedPermissions)
+        } else {
+            // 레거시 지원 - 가장 오래된 요청 처리
+            val oldestRequest = pendingRequests.values.minByOrNull { it.timestamp }
+            if (oldestRequest != null) {
+                pendingRequests.remove(oldestRequest.requestId)
+                contextRef.remove(oldestRequest.requestId)
+                oldestRequest.onResult.invoke(deniedPermissions)
+            }
+        }
+    }
+    
+    public fun resultSpecialPermission(context: Context, permission: String, requestId: String? = null) {
+        val isGranted = context.hasPermission(permission)
+        val deniedPermissions = if (isGranted) emptyList() else listOf(permission)
+        
+        if (requestId != null) {
+            val request = pendingRequests.remove(requestId)
+            contextRef.remove(requestId)
+            request?.onResult?.invoke(deniedPermissions)
+        }
+    }
+    
+    public fun cleanupExpiredRequests(maxAgeMs: Long = 300_000) { // 5분
+        val currentTime = System.currentTimeMillis()
+        val expiredRequests = pendingRequests.filter { (_, request) ->
+            currentTime - request.timestamp > maxAgeMs
+        }
+        
+        expiredRequests.forEach { (requestId, _) ->
+            pendingRequests.remove(requestId)
+            contextRef.remove(requestId)
+        }
     }
 
     public fun request(
@@ -108,12 +166,26 @@ public open class PermissionManager() {
         requestPermissionAlertWindowLauncher: ActivityResultLauncher<Intent>,
         permissions: List<String>,
         onResult: ((deniedPermissions: List<String>) -> Unit)
-    ) {
+    ): String {
         val remainingPermissions = context.remainPermissions(permissions)
         if (remainingPermissions.isEmpty()) {
             onResult(emptyList())
-            return
+            return ""
         }
+
+        val requestId = UUID.randomUUID().toString()
+        val permissionRequest = PermissionRequest(
+            requestId = requestId,
+            permissions = remainingPermissions,
+            onResult = onResult
+        )
+        
+        // 만료된 요청들 정리
+        cleanupExpiredRequests()
+        
+        // 새 요청 저장
+        pendingRequests[requestId] = permissionRequest
+        contextRef[requestId] = WeakReference(context)
 
         val (specialPermissions, normalPermissions) = remainingPermissions.partition { 
             context.isSpecialPermission(it) 
@@ -132,7 +204,7 @@ public open class PermissionManager() {
             requestPermissionLauncher.launch(normalPermissions.toTypedArray())
         }
 
-        this.onResult = onResult
+        return requestId
     }
     
     public fun requestSpecialPermission(
@@ -140,17 +212,45 @@ public open class PermissionManager() {
         specialPermissionLauncher: ActivityResultLauncher<Intent>,
         permission: String,
         onResult: ((granted: Boolean) -> Unit)
-    ) {
+    ): String {
         if (!context.isSpecialPermission(permission)) {
             onResult(false)
-            return
+            return ""
         }
+        
+        val requestId = UUID.randomUUID().toString()
+        val permissionRequest = PermissionRequest(
+            requestId = requestId,
+            permissions = listOf(permission),
+            onResult = { deniedPermissions ->
+                onResult(deniedPermissions.isEmpty())
+            }
+        )
+        
+        // 만료된 요청들 정리
+        cleanupExpiredRequests()
+        
+        // 새 요청 저장
+        pendingRequests[requestId] = permissionRequest
+        contextRef[requestId] = WeakReference(context)
         
         val intent = getIntentForSpecialPermission(context, permission)
         if (intent != null) {
             specialPermissionLauncher.launch(intent)
         } else {
+            // 실패 시 즉시 제거
+            pendingRequests.remove(requestId)
+            contextRef.remove(requestId)
             onResult(false)
         }
+        
+        return requestId
     }
+    
+    public fun cancelRequest(requestId: String) {
+        pendingRequests.remove(requestId)
+        contextRef.remove(requestId)
+    }
+    
+    public fun getPendingRequestsCount(): Int = pendingRequests.size
 }
