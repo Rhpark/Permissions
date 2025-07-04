@@ -37,86 +37,59 @@ public class PermissionManager private constructor() {
         val timestamp: Long = System.currentTimeMillis()
     )
 
-    public fun getIntentForSystemAlertWindow(context: Context): Intent = Intent(
-        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-        Uri.parse("package:${context.packageName}")
+    private val specialPermissionActions = mapOf(
+        Manifest.permission.SYSTEM_ALERT_WINDOW to Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+        Manifest.permission.WRITE_SETTINGS to Settings.ACTION_MANAGE_WRITE_SETTINGS,
+        Manifest.permission.PACKAGE_USAGE_STATS to Settings.ACTION_USAGE_ACCESS_SETTINGS,
+        Manifest.permission.MANAGE_EXTERNAL_STORAGE to Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+        Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS to Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+        Manifest.permission.SCHEDULE_EXACT_ALARM to Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+        Manifest.permission.BIND_ACCESSIBILITY_SERVICE to Settings.ACTION_ACCESSIBILITY_SETTINGS,
+        Manifest.permission.BIND_NOTIFICATION_LISTENER_SERVICE to "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"
     )
 
-    public fun getIntentForWriteSettings(context: Context): Intent = Intent(
-        Settings.ACTION_MANAGE_WRITE_SETTINGS,
-        Uri.parse("package:${context.packageName}")
+    private val permissionsRequiringPackageUri = setOf(
+        Manifest.permission.SYSTEM_ALERT_WINDOW,
+        Manifest.permission.WRITE_SETTINGS,
+        Manifest.permission.MANAGE_EXTERNAL_STORAGE,
+        Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
     )
 
-    public fun getIntentForUsageStats(context: Context): Intent =
-        Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-
-    public fun getIntentForManageExternalStorage(context: Context): Intent = Intent(
-        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-        Uri.parse("package:${context.packageName}")
-    )
-
-    public fun getIntentForBatteryOptimization(context: Context): Intent = Intent(
-        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-        Uri.parse("package:${context.packageName}")
-    )
-
-    public fun getIntentForScheduleExactAlarm(context: Context): Intent =
-        Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-
-    public fun getIntentForAccessibilityService(context: Context): Intent =
-        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-
-    public fun getIntentForNotificationListener(context: Context): Intent =
-        Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-
-    public fun getIntentForSpecialPermission(context: Context, permission: String): Intent? =
+    public fun getIntentForSpecialPermission(context: Context, permission: String): Intent? {
+        // API 레벨 체크
         when (permission) {
-            Manifest.permission.SYSTEM_ALERT_WINDOW -> getIntentForSystemAlertWindow(context)
-            Manifest.permission.WRITE_SETTINGS -> getIntentForWriteSettings(context)
-            Manifest.permission.PACKAGE_USAGE_STATS -> getIntentForUsageStats(context)
             Manifest.permission.MANAGE_EXTERNAL_STORAGE -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    getIntentForManageExternalStorage(context)
-                } else {
-                    null
-                }
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
             }
-            Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS -> getIntentForBatteryOptimization(context)
             Manifest.permission.SCHEDULE_EXACT_ALARM -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    getIntentForScheduleExactAlarm(context)
-                } else {
-                    null
-                }
-            }
-            Manifest.permission.BIND_ACCESSIBILITY_SERVICE -> getIntentForAccessibilityService(context)
-            Manifest.permission.BIND_NOTIFICATION_LISTENER_SERVICE -> getIntentForNotificationListener(context)
-            else -> null
-        }
-
-    private fun isRemainPermissionSystemAlertWindow(permissions: List<String>): Boolean =
-        permissions.contains(Manifest.permission.SYSTEM_ALERT_WINDOW)
-
-    public fun isRequestPermissionSystemAlertWindow(
-        context: Context,
-        permissions: List<String>
-    ): Boolean =
-        isRemainPermissionSystemAlertWindow(permissions) && !Settings.canDrawOverlays(context)
-
-    public fun result(context: Context, permissions: Map<String, Boolean>, requestId: String? = null) {
-        val deniedPermissions = mutableListOf<String>()
-        permissions.forEach { (permission, granted) ->
-            if (!granted) {
-                if (permission == Manifest.permission.SYSTEM_ALERT_WINDOW) {
-                    if (!Settings.canDrawOverlays(context)) {
-                        deniedPermissions.add(permission)
-                    }
-                } else {
-                    deniedPermissions.add(permission)
-                }
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
             }
         }
         
+        val action = specialPermissionActions[permission] ?: return null
+        
+        return if (permissionsRequiringPackageUri.contains(permission)) {
+            Intent(action, Uri.parse("package:${context.packageName}"))
+        } else {
+            Intent(action)
+        }
+    }
+
+
+    public fun result(context: Context, permissions: Map<String, Boolean>, requestId: String? = null) {
+        val deniedPermissions = permissions.filterNot { (permission, granted) ->
+            granted || context.hasPermission(permission)
+        }.keys.toList()
+        
+        handleRequestResult(requestId, deniedPermissions)
+    }
+    
+    public fun resultSpecialPermission(context: Context, permission: String, requestId: String? = null) {
+        val deniedPermissions = if (context.hasPermission(permission)) emptyList() else listOf(permission)
+        handleRequestResult(requestId, deniedPermissions)
+    }
+    
+    private fun handleRequestResult(requestId: String?, deniedPermissions: List<String>) {
         if (requestId != null) {
             val request = pendingRequests.remove(requestId)
             contextRef.remove(requestId)
@@ -129,17 +102,6 @@ public class PermissionManager private constructor() {
                 contextRef.remove(oldestRequest.requestId)
                 oldestRequest.onResult.invoke(deniedPermissions)
             }
-        }
-    }
-    
-    public fun resultSpecialPermission(context: Context, permission: String, requestId: String? = null) {
-        val isGranted = context.hasPermission(permission)
-        val deniedPermissions = if (isGranted) emptyList() else listOf(permission)
-        
-        if (requestId != null) {
-            val request = pendingRequests.remove(requestId)
-            contextRef.remove(requestId)
-            request?.onResult?.invoke(deniedPermissions)
         }
     }
     
@@ -175,12 +137,7 @@ public class PermissionManager private constructor() {
             onResult = onResult
         )
         
-        // 만료된 요청들 정리
-        cleanupExpiredRequests()
-        
-        // 새 요청 저장
-        pendingRequests[requestId] = permissionRequest
-        contextRef[requestId] = WeakReference(context)
+        storeRequest(requestId, permissionRequest, context)
 
         val (specialPermissions, normalPermissions) = remainingPermissions.partition {
             context.isSpecialPermission(it)
@@ -222,29 +179,32 @@ public class PermissionManager private constructor() {
             }
         )
         
-        // 만료된 요청들 정리
-        cleanupExpiredRequests()
-        
-        // 새 요청 저장
-        pendingRequests[requestId] = permissionRequest
-        contextRef[requestId] = WeakReference(context)
+        storeRequest(requestId, permissionRequest, context)
 
         val intent = getIntentForSpecialPermission(context, permission)
         if (intent != null) {
             specialPermissionLauncher.launch(intent)
         } else {
-            // 실패 시 즉시 제거
-            pendingRequests.remove(requestId)
-            contextRef.remove(requestId)
+            cleanupRequest(requestId)
             onResult(false)
         }
         
         return requestId
     }
     
-    public fun cancelRequest(requestId: String) {
+    private fun storeRequest(requestId: String, permissionRequest: PermissionRequest, context: Context) {
+        cleanupExpiredRequests()
+        pendingRequests[requestId] = permissionRequest
+        contextRef[requestId] = WeakReference(context)
+    }
+    
+    private fun cleanupRequest(requestId: String) {
         pendingRequests.remove(requestId)
         contextRef.remove(requestId)
+    }
+    
+    public fun cancelRequest(requestId: String) {
+        cleanupRequest(requestId)
     }
     
     public fun getPendingRequestsCount(): Int = pendingRequests.size
