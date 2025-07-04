@@ -3,7 +3,6 @@ package kr.open.library.permissions.extensions
 import android.Manifest
 import android.app.AppOpsManager
 import android.app.AlarmManager
-import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.PermissionInfo
@@ -19,11 +18,11 @@ import androidx.core.app.NotificationManagerCompat
 public inline fun Context.hasPermission(permission: String): Boolean =
     when (permission) {
         Manifest.permission.SYSTEM_ALERT_WINDOW -> Settings.canDrawOverlays(this)
-        
+
         Manifest.permission.WRITE_SETTINGS -> Settings.System.canWrite(this)
-        
+
         Manifest.permission.PACKAGE_USAGE_STATS -> hasUsageStatsPermission()
-        
+
         Manifest.permission.MANAGE_EXTERNAL_STORAGE -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 Environment.isExternalStorageManager()
@@ -31,12 +30,12 @@ public inline fun Context.hasPermission(permission: String): Boolean =
                 ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
             }
         }
-        
+
         Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS -> {
             val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
             powerManager?.isIgnoringBatteryOptimizations(packageName) ?: false
         }
-        
+
         Manifest.permission.SCHEDULE_EXACT_ALARM -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
@@ -45,7 +44,7 @@ public inline fun Context.hasPermission(permission: String): Boolean =
                 true
             }
         }
-        
+
         Manifest.permission.POST_NOTIFICATIONS -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 NotificationManagerCompat.from(this).areNotificationsEnabled()
@@ -53,11 +52,11 @@ public inline fun Context.hasPermission(permission: String): Boolean =
                 true
             }
         }
-        
+
         Manifest.permission.BIND_ACCESSIBILITY_SERVICE -> hasAccessibilityServicePermission()
-        
+
         Manifest.permission.BIND_NOTIFICATION_LISTENER_SERVICE -> hasNotificationListenerPermission()
-        
+
         else -> {
             if(getPermissionProtectionLevel(permission) == PermissionInfo.PROTECTION_DANGEROUS) {
                 ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED

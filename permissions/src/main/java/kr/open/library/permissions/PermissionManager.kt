@@ -1,7 +1,6 @@
 package kr.open.library.permissions
 
 import android.Manifest
-import android.Manifest.permission.SYSTEM_ALERT_WINDOW
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -38,42 +37,38 @@ public class PermissionManager private constructor() {
         val timestamp: Long = System.currentTimeMillis()
     )
 
-    public fun getIntentForSystemAlertWindow(context: Context): Intent =
-        Intent(
-            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            Uri.parse("package:${context.packageName}")
-        )
-    
-    public fun getIntentForWriteSettings(context: Context): Intent =
-        Intent(
-            Settings.ACTION_MANAGE_WRITE_SETTINGS,
-            Uri.parse("package:${context.packageName}")
-        )
-    
+    public fun getIntentForSystemAlertWindow(context: Context): Intent = Intent(
+        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+        Uri.parse("package:${context.packageName}")
+    )
+
+    public fun getIntentForWriteSettings(context: Context): Intent = Intent(
+        Settings.ACTION_MANAGE_WRITE_SETTINGS,
+        Uri.parse("package:${context.packageName}")
+    )
+
     public fun getIntentForUsageStats(context: Context): Intent =
         Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-    
-    public fun getIntentForManageExternalStorage(context: Context): Intent =
-        Intent(
-            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-            Uri.parse("package:${context.packageName}")
-        )
-    
-    public fun getIntentForBatteryOptimization(context: Context): Intent =
-        Intent(
-            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-            Uri.parse("package:${context.packageName}")
-        )
-    
+
+    public fun getIntentForManageExternalStorage(context: Context): Intent = Intent(
+        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+        Uri.parse("package:${context.packageName}")
+    )
+
+    public fun getIntentForBatteryOptimization(context: Context): Intent = Intent(
+        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+        Uri.parse("package:${context.packageName}")
+    )
+
     public fun getIntentForScheduleExactAlarm(context: Context): Intent =
         Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-    
+
     public fun getIntentForAccessibilityService(context: Context): Intent =
         Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-    
+
     public fun getIntentForNotificationListener(context: Context): Intent =
         Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-    
+
     public fun getIntentForSpecialPermission(context: Context, permission: String): Intent? =
         when (permission) {
             Manifest.permission.SYSTEM_ALERT_WINDOW -> getIntentForSystemAlertWindow(context)
@@ -100,7 +95,7 @@ public class PermissionManager private constructor() {
         }
 
     private fun isRemainPermissionSystemAlertWindow(permissions: List<String>): Boolean =
-        permissions.contains(SYSTEM_ALERT_WINDOW)
+        permissions.contains(Manifest.permission.SYSTEM_ALERT_WINDOW)
 
     public fun isRequestPermissionSystemAlertWindow(
         context: Context,
@@ -112,7 +107,7 @@ public class PermissionManager private constructor() {
         val deniedPermissions = mutableListOf<String>()
         permissions.forEach { (permission, granted) ->
             if (!granted) {
-                if (permission == SYSTEM_ALERT_WINDOW) {
+                if (permission == Manifest.permission.SYSTEM_ALERT_WINDOW) {
                     if (!Settings.canDrawOverlays(context)) {
                         deniedPermissions.add(permission)
                     }
@@ -187,8 +182,8 @@ public class PermissionManager private constructor() {
         pendingRequests[requestId] = permissionRequest
         contextRef[requestId] = WeakReference(context)
 
-        val (specialPermissions, normalPermissions) = remainingPermissions.partition { 
-            context.isSpecialPermission(it) 
+        val (specialPermissions, normalPermissions) = remainingPermissions.partition {
+            context.isSpecialPermission(it)
         }
 
         if (specialPermissions.isNotEmpty()) {
@@ -206,7 +201,7 @@ public class PermissionManager private constructor() {
 
         return requestId
     }
-    
+
     public fun requestSpecialPermission(
         context: Context,
         specialPermissionLauncher: ActivityResultLauncher<Intent>,
@@ -233,7 +228,7 @@ public class PermissionManager private constructor() {
         // 새 요청 저장
         pendingRequests[requestId] = permissionRequest
         contextRef[requestId] = WeakReference(context)
-        
+
         val intent = getIntentForSpecialPermission(context, permission)
         if (intent != null) {
             specialPermissionLauncher.launch(intent)
