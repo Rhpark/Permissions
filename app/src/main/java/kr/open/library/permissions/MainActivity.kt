@@ -61,7 +61,6 @@ class MainActivity : AppCompatActivity() {
         Manifest.permission.SYSTEM_ALERT_WINDOW,
         Manifest.permission.WRITE_SETTINGS,
         Manifest.permission.PACKAGE_USAGE_STATS,
-        Manifest.permission.MANAGE_EXTERNAL_STORAGE,
         Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
         Manifest.permission.SCHEDULE_EXACT_ALARM,
         Manifest.permission.POST_NOTIFICATIONS
@@ -69,10 +68,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContentView(R.layout.activity_main)
 
-
+        Logx.d()
         requestPermissions(permissionList) { deniedPermissions ->
             Logx.d("deniedPermissions: $deniedPermissions")
             if (deniedPermissions.isNotEmpty()) {
